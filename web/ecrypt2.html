@@ -1,0 +1,315 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encode and Decode Message</title>
+        <style>
+            body {
+                font-family: 'Arial', sans-serif;
+                background-color: #f7f9fc;
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                min-height: 100vh;
+                color: #333;
+                box-sizing: border-box;
+            }
+            
+            h2, h3 {
+                color: #2c3e50;
+                text-align: center;
+            }
+            
+            .container {
+                width: 100%;
+                max-width: 600px;
+                padding: 20px;
+                background-color: white;
+                border-radius: 10px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                margin: 20px 0;
+                box-sizing: border-box;
+            }
+            
+            label {
+                font-weight: bold;
+                display: block;
+                margin-bottom: 5px;
+            }
+            
+            textarea, 
+            input[type="password"], 
+            input[type="file"] {
+                width: 100%;
+                padding: 12px;
+                margin-bottom: 15px;
+                border-radius: 5px;
+                border: 1px solid #ccc;
+                font-size: 16px;
+                box-sizing: border-box;
+            }
+            
+            button {
+                padding: 10px 15px;
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                transition: background-color 0.3s;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            button:hover {
+                background-color: #2980b9;
+            }
+            
+            .encoded-image-container {
+                text-align: center;
+                margin: 20px 0;
+            }
+            
+            .download-btn-container {
+                text-align: center;
+                margin-top: 10px;
+            }
+            
+            .download-btn-container button {
+                display: inline-block;
+                font-size: 16px;
+                padding: 10px 15px;
+            }
+            
+            .decoded-message {
+                background-color: #ecf0f1;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 16px;
+                word-wrap: break-word;
+            }
+            
+            @media (max-width: 600px) {
+                .container {
+                    padding: 15px;
+                }
+                
+                button {
+                    font-size: 14px;
+                }
+                
+                textarea, 
+                input[type="password"], 
+                input[type="file"] {
+                    font-size: 14px;
+                    padding: 10px;
+                }
+            }
+        </style>
+
+  </head>
+  <body>
+    <div class="container">
+      <h2>Message Encoder</h2>
+      <label for="message">Message:</label>
+      <textarea id="message" rows="4"></textarea>
+      
+      <label for="password">Password:</label>
+      <input type="password" id="password">
+      
+      <button onclick="encodeAndDisplay()">Encode</button>
+      
+      <h3>Encoded Image</h3>
+      <div id="encoded-image-container"></div>
+      
+      <div class="download-btn-container">
+        <button id="download-btn" style="display: none;" onclick="downloadImage()">Download Image</button>
+      </div>
+    </div>
+    
+    <hr>
+    
+    <div class="container">
+      <h2>Message Decoder</h2>
+      
+      <label for="decode-password">Password:</label>
+      <input type="password" id="decode-password">
+      
+      <label for="image-upload">Upload Image (100x100 PNG):</label>
+      <input type="file" id="image-upload" accept="image/png">
+      
+      <button onclick="decodeImage()">Decode</button>
+      
+      <h3>Decoded Message:</h3>
+      <p id="decoded-message" class="decoded-message"></p>
+    </div>
+    
+    <script>
+      function seedPRNG(seed) {
+        let x = parseInt(seed.slice(0, 8), 16);
+        return function () {
+          x ^= x << 13;
+          x ^= x >> 17;
+          x ^= x << 5;
+          return (x >>> 0) / 4294967296;
+        };
+      }
+      
+      async function encodeMessage(message, password) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 100;
+        canvas.height = 100;
+        const ctx = canvas.getContext("2d");
+        const imageData = ctx.createImageData(100, 100);
+        
+        const hash = await hashPassword(password);
+        const rng = seedPRNG(hash);
+        
+        const binaryMessage = Array.from(message).flatMap((char) =>
+          char.charCodeAt(0).toString(2).padStart(8, "0").split("").map(Number)
+        );
+        
+        const messageLength = message.length;
+        const binaryLength = messageLength
+        .toString(2)
+        .padStart(16, "0")
+        .split("")
+        .map(Number);
+        const binaryData = [...binaryLength, ...binaryMessage];
+        
+        const positions = Array.from({ length: 10000 }, (_, i) => i);
+        for (let i = positions.length - 1; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        
+        let dataIndex = 0;
+        for (let i = 0; i < 10000; i++) {
+          const pixelIndex = positions[i] * 4;
+          
+          if (dataIndex < binaryData.length) {
+            imageData.data[pixelIndex] = binaryData[dataIndex] ? 255 : 0;
+            imageData.data[pixelIndex + 1] = 0; 
+            imageData.data[pixelIndex + 2] = 0; 
+            imageData.data[pixelIndex + 3] = 255;
+            dataIndex++;
+          } else {
+            imageData.data[pixelIndex] = Math.floor(rng() * 256);
+            imageData.data[pixelIndex + 1] = Math.floor(rng() * 256);
+            imageData.data[pixelIndex + 2] = Math.floor(rng() * 256);
+            imageData.data[pixelIndex + 3] = 255;
+          }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        return canvas;
+      }
+      
+      async function decodeMessage(imageData, password) {
+        const hash = await hashPassword(password);
+        const rng = seedPRNG(hash);
+        
+        const positions = Array.from({ length: 10000 }, (_, i) => i);
+        for (let i = positions.length - 1; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        
+        const binaryData = [];
+        for (let i = 0; i < 10000; i++) {
+          const pixelIndex = positions[i] * 4;
+          const red = imageData.data[pixelIndex];
+          binaryData.push(red === 255 ? 1 : 0);
+        }
+        
+        const binaryLength = binaryData.slice(0, 16).join("");
+        const messageLength = parseInt(binaryLength, 2);
+        
+        const binaryMessage = binaryData.slice(16, 16 + messageLength * 8);
+        const message = binaryMessage
+        .join("")
+        .match(/.{1,8}/g)
+        .map((byte) => String.fromCharCode(parseInt(byte, 2)))
+        .join("");
+        
+        return message;
+      }
+      
+      async function hashPassword(password) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        return Array.from(new Uint8Array(hashBuffer))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      }
+      
+      async function encodeAndDisplay() {
+        const message = document.getElementById("message").value;
+        const password = document.getElementById("password").value;
+        
+        if (!message || !password) {
+          alert("Please provide both a message and password.");
+          return;
+        }
+        
+        const encodedCanvas = await encodeMessage(message, password);
+        const container = document.getElementById("encoded-image-container");
+        container.innerHTML = "";
+        container.appendChild(encodedCanvas);
+        
+        const downloadBtn = document.getElementById("download-btn");
+        downloadBtn.style.display = "inline-block";
+        downloadBtn.setAttribute("data-canvas", encodedCanvas.toDataURL());
+      }
+      
+      function downloadImage() {
+        const downloadBtn = document.getElementById("download-btn");
+        const imageDataUrl = downloadBtn.getAttribute("data-canvas");
+        const link = document.createElement("a");
+        link.href = imageDataUrl;
+        link.download = "encoded_message.png";
+        link.click();
+      }
+      
+      async function decodeImage() {
+        const password = document.getElementById("decode-password").value;
+        const fileInput = document.getElementById("image-upload");
+        const file = fileInput.files[0];
+        
+        if (!file || !password) {
+          alert("Please provide both an image and a password.");
+          return;
+        }
+        
+        const image = new Image();
+        const reader = new FileReader();
+        
+        reader.onload = async function(event) {
+          image.src = event.target.result;
+          
+          image.onload = async function() {
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            canvas.width = image.width;
+            canvas.height = image.height;
+            ctx.drawImage(image, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, image.width, image.height);
+            const decodedMessage = await decodeMessage(imageData, password);
+            
+            document.getElementById("decoded-message").innerText = decodedMessage;
+          };
+        };
+        
+        reader.readAsDataURL(file);
+      }
+    </script>
+  </body>
+</html>
